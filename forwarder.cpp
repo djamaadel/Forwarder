@@ -164,7 +164,17 @@ Forwarder::onInterestLoop(Face& inFace, const Interest& interest)
     NFD_LOG_DEBUG("onInterestLoop face=" << inFace.getId() <<
                   " interest=" << interest.getName() <<
                   " drop");
-    return;
+    //*******************************************************************************
+	shared_ptr<pit::Entry> pitEntry = m_pit.find(interest);
+	//NFD_LOG_DEBUG("diffTimerFired="<< pitEntry->diffTimerFired);
+	if (!pitEntry->diffTimerFired)// Interest is Received (overheared) within the DifferTimer period
+	{
+		NFD_LOG_DEBUG("Cancel Sending Interest="<< interest.getName());
+		scheduler::cancel(pitEntry->differTimer);//Cancel DiffTimer
+		m_pit.erase(pitEntry.get());//Erase pitEntry
+	}
+	//*******************************************************************************
+	return;
   }
 
   NFD_LOG_DEBUG("onInterestLoop face=" << inFace.getId() <<
