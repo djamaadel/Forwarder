@@ -220,7 +220,10 @@ public:
    *  This timer is used in forwarding pipelines to delete the entry
    */
   scheduler::EventId expiryTimer;
-
+  
+  scheduler::EventId differTimer;
+  bool diffTimerFired;
+  
   /** \brief indicate if PIT entry is satisfied
    */
   bool isSatisfied;
