@@ -164,7 +164,17 @@ Forwarder::onInterestLoop(Face& inFace, const Interest& interest)
     NFD_LOG_DEBUG("onInterestLoop face=" << inFace.getId() <<
                   " interest=" << interest.getName() <<
                   " drop");
-    return;
+    //*******************************************************************************
+	shared_ptr<pit::Entry> pitEntry = m_pit.find(interest);
+	//NFD_LOG_DEBUG("diffTimerFired="<< pitEntry->diffTimerFired);
+	if (!pitEntry->diffTimerFired)// Interest is Received (overheared) within the DifferTimer period
+	{
+		NFD_LOG_DEBUG("Cancel Sending Interest="<< interest.getName());
+		scheduler::cancel(pitEntry->differTimer);//Cancel DiffTimer
+		m_pit.erase(pitEntry.get());//Erase pitEntry
+	}
+	//*******************************************************************************
+	return;
   }
 
   NFD_LOG_DEBUG("onInterestLoop face=" << inFace.getId() <<
@@ -177,7 +187,6 @@ Forwarder::onInterestLoop(Face& inFace, const Interest& interest)
   nack.setReason(lp::NackReason::DUPLICATE);
   inFace.sendNack(nack);
 }
-
 static inline bool
 compare_InRecord_expiry(const pit::InRecord& a, const pit::InRecord& b)
 {
@@ -241,20 +250,47 @@ Forwarder::onContentStoreHit(const Face& inFace, const shared_ptr<pit::Entry>& p
   this->dispatchToStrategy(*pitEntry,
     [&] (fw::Strategy& strategy) { strategy.afterContentStoreHit(pitEntry, inFace, data); });
 }
+void 
+Forwarder::DifferTimer(const shared_ptr<pit::Entry>& pitEntry, const shared_ptr<Face>& outFace, 
+									const shared_ptr<Interest>& interest)
+{
+  NFD_LOG_DEBUG("onOutgoingInterest face=" << outFace->getId() <<
+                " interest=" << pitEntry->getName());
+  pitEntry->diffTimerFired = true;
+  outFace->sendInterest(*interest);
+  ++m_counters.nOutInterests;
+}
 
 void
 Forwarder::onOutgoingInterest(const shared_ptr<pit::Entry>& pitEntry, Face& outFace, const Interest& interest)
 {
-  NFD_LOG_DEBUG("onOutgoingInterest face=" << outFace.getId() <<
-                " interest=" << pitEntry->getName());
+  //NFD_LOG_DEBUG("onOutgoingInterest face=" << outFace.getId() <<
+  //              " interest=" << pitEntry->getName());
 
   // insert out-record
+  shared_ptr<Interest> interest2 = make_shared<Interest>(interest);
   pitEntry->insertOrUpdateOutRecord(outFace, interest);
-
   // send Interest
-  outFace.sendInterest(interest);
-  ++m_counters.nOutInterests;
+  //***************************************************************
+  auto node = ns3::NodeList::GetNode(ns3::Simulator::GetContext());
+  //std::cout<<" ******************Node ID :************************************ "<<node->GetId()<<std::endl;
+  interest2->setTag(make_shared<lp::NodeIDTag>(node->GetId()));
+  //*****************************************************************
+  shared_ptr<Interest> interest3=interest2;
+   // **************************************************
+   auto FaceCopy =outFace.shared_from_this();
+   auto InterestCopy =interest3->shared_from_this();
+   // Enable Diff timer in case of outgoing face is external (ad hoc face = 256)
+   auto pitIdNodTag=pitEntry->getInterest().getTag<ns3::ndn::lp::NodeIDTag>();
+   // Define Diff Time according to the outFace and the Interest packet type 
+   time::milliseconds DiffTime ;
+   if (outFace.getId() == 256 && pitIdNodTag != nullptr ) 
+			DiffTime = time::milliseconds(rand()%20);
+   else DiffTime = time::milliseconds(0);
+	pitEntry->diffTimerFired = false;
+	pitEntry->differTimer = scheduler::schedule(DiffTime, bind(&Forwarder::DifferTimer, this,  pitEntry, FaceCopy, InterestCopy));
 }
+
 
 void
 Forwarder::onInterestFinalize(const shared_ptr<pit::Entry>& pitEntry)
