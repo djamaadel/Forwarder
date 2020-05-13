@@ -228,6 +228,9 @@ PUBLIC_WITH_TESTS_ELSE_PRIVATE: // pipelines
    */
   VIRTUAL_WITH_TESTS void
   onOutgoingInterest(const shared_ptr<pit::Entry>& pitEntry, Face& outFace, const Interest& interest);
+  
+  VIRTUAL_WITH_TESTS void 
+  DifferTimer(const shared_ptr<pit::Entry>& pitEntry, const shared_ptr<Face>& outFace, const shared_ptr<Interest>& interest);
 
   /** \brief Interest finalize pipeline
    */
